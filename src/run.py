@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -29,7 +30,14 @@ def main():
         "--api_key",
         type=str,
         default=None,
-        help="InternLM API Key（默认读取环境变量 INTERNLM_API_KEY）",
+        help="LLM API Key（默认读取环境变量 INTERNLM_API_KEY 或 DEEPSEEK_API_KEY）",
+    )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="internlm",
+        choices=["internlm", "deepseek"],
+        help="LLM 提供商（默认 internlm）",
     )
     parser.add_argument(
         "--async_mode",
@@ -41,8 +49,12 @@ def main():
     args = parser.parse_args()
 
     if args.api_key:
-        import os
-        os.environ["INTERNLM_API_KEY"] = args.api_key
+        if args.provider == "internlm":
+            os.environ["INTERNLM_API_KEY"] = args.api_key
+        else:
+            os.environ["DEEPSEEK_API_KEY"] = args.api_key
+
+    os.environ["LLM_PROVIDER"] = args.provider
 
     if args.async_mode:
         result = asyncio.run(run_pipeline_async(args.input_dir, args.output_dir))

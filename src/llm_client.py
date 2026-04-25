@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -20,7 +21,9 @@ class LLMClient:
         self.model = model or config.MODEL_NAME
 
         if not self.api_key:
-            raise ValueError("API Key 未设置，请配置环境变量 INTERNLM_API_KEY")
+            provider = os.getenv("LLM_PROVIDER", "internlm")
+            env_var = "INTERNLM_API_KEY" if provider == "internlm" else "DEEPSEEK_API_KEY"
+            raise ValueError(f"API Key 未设置，请配置环境变量 {env_var}")
 
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
@@ -74,6 +77,12 @@ class LLMClient:
                 fixed = _fix_json(raw)
                 return json.loads(fixed)
             except Exception:
+                # 保存原始响应到文件用于调试
+                import os
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(raw)
+                    print(f"[DEBUG] 无法解析的 JSON 已保存到: {f.name}")
                 raise RuntimeError(f"LLM 返回无法解析为 JSON: {e}\n原始文本前500字: {raw[:500]}") from e
 
 
@@ -84,6 +93,10 @@ def _fix_json(text: str) -> str:
     # 去除注释
     text = re.sub(r"//.*?\n", "\n", text)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    # 修复单引号
+    text = re.sub(r"'([^']*)'", r'"\1"', text)
+    # 修复缺失引号的键
+    text = re.sub(r'(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1 "\2":', text)
     return text
 
 
@@ -99,7 +112,9 @@ class AsyncLLMClient:
         self.model = model or config.MODEL_NAME
 
         if not self.api_key:
-            raise ValueError("API Key 未设置，请配置环境变量 INTERNLM_API_KEY")
+            provider = os.getenv("LLM_PROVIDER", "internlm")
+            env_var = "INTERNLM_API_KEY" if provider == "internlm" else "DEEPSEEK_API_KEY"
+            raise ValueError(f"API Key 未设置，请配置环境变量 {env_var}")
 
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
         self._semaphore = asyncio.Semaphore(30)
@@ -163,4 +178,10 @@ class AsyncLLMClient:
                 fixed = _fix_json(raw)
                 return json.loads(fixed)
             except Exception:
+                # 保存原始响应到文件用于调试
+                import os
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(raw)
+                    print(f"[DEBUG] 无法解析的 JSON 已保存到: {f.name}")
                 raise RuntimeError(f"LLM 返回无法解析为 JSON: {e}\n原始文本前500字: {raw[:500]}") from e

@@ -10,15 +10,29 @@ _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(dotenv_path=_env_path, override=True)
 
-# ==================== InternLM API 配置 ====================
+# ==================== LLM 提供商配置 ====================
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "internlm")
+
+# InternLM API 配置
 # 参考用户实测可用的端点:
 # curl --location 'https://chat.intern-ai.org.cn/api/v1/chat/completions' \
 #   --header 'Authorization: Bearer <token>' \
 #   --header 'Content-Type: application/json' \
 #   --data '{"model": "intern-latest", "messages": [...]}'
-API_BASE = "https://chat.intern-ai.org.cn/api/v1"
-API_KEY = os.getenv("INTERNLM_API_KEY", "")
-MODEL_NAME = "intern-latest"
+INTERNLM_API_BASE = "https://chat.intern-ai.org.cn/api/v1"
+INTERNLM_API_KEY = os.getenv("INTERNLM_API_KEY", "")
+INTERNLM_MODEL_NAME = "intern-latest"
+
+# DeepSeek API 配置
+DEEPSEEK_API_BASE = "https://api.deepseek.com/v1"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL_NAME = "deepseek-v4-pro"
+
+# 根据提供商选择配置
+API_BASE = INTERNLM_API_BASE if LLM_PROVIDER == "internlm" else DEEPSEEK_API_BASE
+API_KEY = INTERNLM_API_KEY if LLM_PROVIDER == "internlm" else DEEPSEEK_API_KEY
+MODEL_NAME = INTERNLM_MODEL_NAME if LLM_PROVIDER == "internlm" else DEEPSEEK_MODEL_NAME
+
 MAX_TOKENS = 8192
 TEMPERATURE = 0.1
 REQUEST_TIMEOUT = 120
@@ -51,7 +65,7 @@ DOC_TYPE_KEYWORDS = {
     ],
 }
 
-SKIP_DOC_TYPES = {"提示性公告"}  # 这些类型只输出骨架 JSON
+SKIP_DOC_TYPES = {"提示性公告", "上市公告书", "H股公告", "补充披露文件"}  # 这些类型只输出骨架 JSON
 
 # ==================== 章节关键词映射（用于定位大章节） ====================
 CHAPTER_KEYWORDS = {

@@ -2,17 +2,53 @@
   "document_id": "1224957012_3cab4602.pdf-4b9a8df8-3003-4e38-bdeb-b3f983ffd76f",
   "document_type": "招股说明书",
   "issuer_profile": {
-    "issuer_name": null,
+    "issuer_name": {
+      "value": "深圳北芯生命科技股份有限公司",
+      "source_chapter": "第二节 概览",
+      "source_text": "发行人名称 深圳北芯生命科技股份有限公司"
+    },
     "issuer_name_normalized": null,
-    "stock_code": null,
-    "exchange": null,
-    "board": null,
-    "legal_representative": null,
-    "registered_address": null,
-    "industry": null,
-    "main_business": "研发、生产和销售冠脉复杂病变血管通路产品，包括微导管和延长导管等医疗器械",
+    "stock_code": {
+      "value": null,
+      "source_chapter": "",
+      "source_text": ""
+    },
+    "exchange": {
+      "value": "上交所",
+      "source_chapter": "第二节 概览",
+      "source_text": "首次公开发行A股股票并在科创板上市"
+    },
+    "board": {
+      "value": "科创板",
+      "source_chapter": "第二节 概览",
+      "source_text": "首次公开发行A股股票并在科创板上市"
+    },
+    "legal_representative": {
+      "value": "宋亮",
+      "source_chapter": "第二节 概览",
+      "source_text": "法定代表人 宋亮"
+    },
+    "registered_address": {
+      "value": "深圳市龙华区民治街道北站社区鸿荣源北站中心A塔2102（一照多址企业）",
+      "source_chapter": "第二节 概览",
+      "source_text": "注册地址 深圳市龙华区民治街道北站社区鸿荣源北站中心A塔2102（一照多址企业）"
+    },
+    "industry": {
+      "value": "C35专用设备制造业",
+      "source_chapter": "第二节 概览",
+      "source_text": "行业分类 C35专用设备制造业"
+    },
+    "main_business": {
+      "value": "致力于开发为冠状动脉疾病、外周血管疾病及房颤等心血管疾病诊疗带来变革的精准解决方案",
+      "source_chapter": "第四节 发行人基本情况",
+      "source_text": "公司致力于开发为冠状动脉疾病、外周血管疾病及房颤等心血管疾病诊疗带来变革的精准解决方案"
+    },
     "source_evidence_id": "ev_2965",
-    "establishment_date": null,
+    "establishment_date": {
+      "value": "2021-06-16",
+      "source_chapter": "第二节 概览",
+      "source_text": "股份公司成立日期 2021年6月16日"
+    },
     "registered_capital": {
       "value": null,
       "unit": "万元",
@@ -21,7 +57,13 @@
   },
   "ownership_structure": {
     "controlling_shareholder": [],
-    "actual_controller": [],
+    "actual_controller": [
+      {
+        "name": "宋亮",
+        "control_type": null,
+        "source_evidence_id": null
+      }
+    ],
     "concerted_action_flag": false,
     "top_shareholders": [],
     "source_evidence_id": "ev_3008"

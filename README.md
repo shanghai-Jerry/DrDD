@@ -35,8 +35,14 @@ pip install openai
 
 ### 2. API Key 配置
 
+**InternLM（默认）：**
 ```bash
 export INTERNLM_API_KEY="your-api-key-here"
+```
+
+**DeepSeek：**
+```bash
+exportDEEPSEEK_API_KEY="your-api-key-here"
 ```
 
 或在运行脚本时通过 `--api_key` 参数传入。
@@ -45,8 +51,14 @@ export INTERNLM_API_KEY="your-api-key-here"
 
 ### 单文档运行
 
+**使用 InternLM（默认）：**
 ```bash
 python src/run.py --input_dir data/mineru-output/1224957012_3cab4602.pdf-4b9a8df8-3003-4e38-bdeb-b3f983ffd76f --output_dir results/
+```
+
+**使用 DeepSeek：**
+```bash
+python src/run.py --input_dir data/mineru-output/1224957012_3cab4602.pdf-4b9a8df8-3003-4e38-bdeb-b3f983ffd76f --output_dir results/ --provider deepseek
 ```
 
 ### 批量手动运行（遍历全部文档）
@@ -94,15 +106,15 @@ done
       └── 对每个章节，聚合对应的 paragraph / table / list block
           保留表格 HTML、段落文本、脚注，同时记录 page_no / bbox 作为证据
   │
-  ▼
+   ▼
 4. 大模型字段抽取器（llm_extractor）
-      └── 调用 InternLM API，按 6 大字段类别分批次/分章节调用：
-          - 发行人基础信息（概览章节）
-          - 股权与控制关系（股本股东章节）
-          - 财务指标（财务会计章节）
-          - 募投项目（募集资金章节）
-          - 风险事项（风险因素章节）
-          - 合规事项（治理/法律章节）
+       └── 调用 LLM API（支持 InternLM/DeepSeek），按 6 大字段类别分批次/分章节调用：
+           - 发行人基础信息（概览章节）
+           - 股权与控制关系（股本股东章节）
+           - 财务指标（财务会计章节）
+           - 募投项目（募集资金章节）
+           - 风险事项（风险因素章节）
+           - 合规事项（治理/法律章节）
   │
   ▼
 5. 后处理器（post_processor）

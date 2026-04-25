@@ -167,11 +167,15 @@ class LLMExtractor:
 
         for idx, chunk in enumerate(chunks):
             print(f"[LLM]   -> 调用 {field_category} chunk {idx + 1}/{len(chunks)} | {len(chunk)} 字符")
+            print(f"[LLM]   -> Prompt前200字符: {prompt_template[:200] if idx == 0 else '[同前]'}")
             prompt = prompt_template.replace("{chapter_text}", chunk)
             try:
                 result = self.client.chat_json(prompt, system_prompt=config.SYSTEM_PROMPT)
+                print(f"[LLM]   <- 原始返回: {str(result)[:500]}")
             except Exception as e:
                 print(f"[LLM]   <- {field_category} chunk {idx + 1} 失败: {e}")
+                import traceback
+                print(f"[LLM]   <- 异常堆栈: {traceback.format_exc()}")
                 continue
 
             if result is None:
