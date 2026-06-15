@@ -9,6 +9,60 @@ from .llm_client import AsyncLLMClient, LLMClient
 
 CHUNK_MAX_CHARS = 120000  # 适配 256K 上下文窗口
 
+
+def _merge_object_results(results: List[Dict]) -> Optional[Dict]:
+    """合并多个 chunk 返回的 dict 结果
+
+    策略：
+    - 标量字段：后 chunk 的非空值覆盖前 chunk（文档越靠后越详细）
+    - 数组字段：累积 extend，再按 name/project_name 等去重
+    """
+    if not results:
+        return None
+    valid = [r for r in results if isinstance(r, dict)]
+    if not valid:
+        return None
+    if len(valid) == 1:
+        return valid[0]
+
+    merged = {}
+    for r in valid:
+        for k, v in r.items():
+            if isinstance(v, list) and isinstance(merged.get(k), list):
+                # 数组字段：累积
+                merged[k].extend(v)
+            elif isinstance(v, list):
+                merged[k] = v
+            elif v not in (None, "", {}, []):
+                # 标量字段：后 chunk 覆盖（靠后的文本通常包含更完整的信息）
+                merged[k] = v
+            elif k not in merged:
+                # 首次出现该键，即使值为空也先记录
+                merged[k] = v
+
+    # 数组字段去重
+    for k, v in merged.items():
+        if isinstance(v, list) and len(v) > 1:
+            seen = set()
+            deduped = []
+            for item in v:
+                if isinstance(item, dict):
+                    name_key = (item.get("name") or item.get("project_name")
+                                or item.get("field_name")
+                                or json.dumps(item, ensure_ascii=False, sort_keys=True))
+                    if name_key not in seen:
+                        seen.add(name_key)
+                        deduped.append(item)
+                else:
+                    if item not in seen:
+                        seen.add(item)
+                        deduped.append(item)
+            merged[k] = deduped
+
+    if any(v not in (None, "", [], {}) for v in merged.values()):
+        return merged
+    return None
+
 # 字段类别到章节关键词的映射
 FIELD_CHAPTER_MAPPING = {
     "issuer_profile": {
@@ -20,7 +74,7 @@ FIELD_CHAPTER_MAPPING = {
         "is_object": True,
     },
     "financials": {
-        "keywords": ["财务会计信息", "业务与技术", "管理层分析"],
+        "keywords": ["财务会计信息", "财务报表", "管理层分析", "募集资金运用"],
         "is_object": False,
     },
     "fund_raising_projects": {
@@ -51,10 +105,21 @@ class LLMExtractor:
         return self.async_client
 
     def _merge_texts_for_field(self, chapter_texts: Dict[str, str],
-                                field_category: str) -> str:
-        """为特定字段合并相关章节的文本"""
-        mapping = FIELD_CHAPTER_MAPPING.get(field_category, {})
-        keywords = mapping.get("keywords", [])
+                                field_category: str,
+                                field_mapping: Optional[Dict[str, list]] = None) -> str:
+        """为特定字段合并相关章节的文本
+
+        Args:
+            field_mapping: 动态映射 {field: [chapter_heading, ...]}，
+                           为 None 时回退到静态 FIELD_CHAPTER_MAPPING 关键词匹配
+        """
+        if field_mapping and field_category in field_mapping:
+            keywords = field_mapping[field_category]
+            use_exact = True
+        else:
+            mapping = FIELD_CHAPTER_MAPPING.get(field_category, {})
+            keywords = mapping.get("keywords", [])
+            use_exact = False
 
         parts = []
         total = 0
@@ -65,8 +130,10 @@ class LLMExtractor:
             if not text:
                 continue
 
-            # 检查章节是否与字段相关
-            is_relevant = any(kw in chapter_name for kw in keywords)
+            if use_exact:
+                is_relevant = chapter_name in keywords
+            else:
+                is_relevant = any(kw in chapter_name for kw in keywords)
             if not is_relevant:
                 continue
 
@@ -82,25 +149,38 @@ class LLMExtractor:
         return "\n".join(parts)
 
     def _merge_evidence_for_field(self, chapter_texts: Dict[str, str],
-                                   field_category: str) -> List[Dict]:
+                                   field_category: str,
+                                   field_mapping: Optional[Dict[str, list]] = None) -> List[Dict]:
         """为特定字段合并相关章节的证据"""
-        mapping = FIELD_CHAPTER_MAPPING.get(field_category, {})
-        keywords = mapping.get("keywords", [])
+        if field_mapping and field_category in field_mapping:
+            keywords = field_mapping[field_category]
+            use_exact = True
+        else:
+            mapping = FIELD_CHAPTER_MAPPING.get(field_category, {})
+            keywords = mapping.get("keywords", [])
+            use_exact = False
 
         all_evidence = []
         for chapter_name, chapter_info in chapter_texts.items():
-            is_relevant = any(kw in chapter_name for kw in keywords)
+            if use_exact:
+                is_relevant = chapter_name in keywords
+            else:
+                is_relevant = any(kw in chapter_name for kw in keywords)
             if is_relevant:
                 evidence = chapter_info.get("evidence", [])
                 all_evidence.extend(evidence)
 
         return all_evidence
 
-    def extract_all(self, chapter_texts: Dict[str, Dict]) -> Tuple[Dict[str, Any], Dict[str, List[Dict]]]:
+    def extract_all(self, chapter_texts: Dict[str, Dict],
+                    field_mapping: Optional[Dict[str, list]] = None
+                    ) -> Tuple[Dict[str, Any], Dict[str, List[Dict]]]:
         """抽取全部 6 类字段（同步版本）
 
         Args:
             chapter_texts: 章节文本映射
+            field_mapping: 动态章节-字段映射 {field: [chapter_heading, ...]}
+                           None 时使用静态 FIELD_CHAPTER_MAPPING
 
         Returns:
             (抽取结果, 证据映射)
@@ -109,19 +189,22 @@ class LLMExtractor:
         evidence_map = {}
 
         for field_category in FIELD_CHAPTER_MAPPING:
-            text = self._merge_texts_for_field(chapter_texts, field_category)
-            evidence = self._merge_evidence_for_field(chapter_texts, field_category)
+            text = self._merge_texts_for_field(chapter_texts, field_category, field_mapping)
+            evidence = self._merge_evidence_for_field(chapter_texts, field_category, field_mapping)
 
             results[field_category] = self._extract_single(field_category, text)
             evidence_map[field_category] = evidence
 
         return results, evidence_map
 
-    async def extract_all_async(self, chapter_texts: Dict[str, Dict]) -> Tuple[Dict[str, Any], Dict[str, List[Dict]]]:
+    async def extract_all_async(self, chapter_texts: Dict[str, Dict],
+                                field_mapping: Optional[Dict[str, list]] = None
+                                ) -> Tuple[Dict[str, Any], Dict[str, List[Dict]]]:
         """抽取全部 6 类字段（异步并发版本）
 
         Args:
             chapter_texts: 章节文本映射
+            field_mapping: 动态章节-字段映射 {field: [chapter_heading, ...]}
 
         Returns:
             (抽取结果, 证据映射)
@@ -130,8 +213,8 @@ class LLMExtractor:
         texts = {}
 
         for field_category in FIELD_CHAPTER_MAPPING:
-            texts[field_category] = self._merge_texts_for_field(chapter_texts, field_category)
-            evidence_map[field_category] = self._merge_evidence_for_field(chapter_texts, field_category)
+            texts[field_category] = self._merge_texts_for_field(chapter_texts, field_category, field_mapping)
+            evidence_map[field_category] = self._merge_evidence_for_field(chapter_texts, field_category, field_mapping)
 
         tasks = [
             self._extract_async(field_category, texts[field_category])
@@ -171,6 +254,8 @@ class LLMExtractor:
         for idx, chunk in enumerate(chunks):
             print(f"[LLM]   -> 调用 {field_category} chunk {idx + 1}/{len(chunks)} | {len(chunk)} 字符")
             prompt = prompt_template.replace("{chapter_text}", chunk)
+            if field_category == "issuer_profile":
+                print(f"[LLM][issuer_profile] 输入prompt:\n{'-'*60}\n{prompt}\n{'-'*60}")
             try:
                 result = self.client.chat_json(prompt, system_prompt=config.SYSTEM_PROMPT)
             except Exception as e:
@@ -192,12 +277,12 @@ class LLMExtractor:
 
         # 合并结果
         if is_object:
-            for r in reversed(all_results):
-                if r and isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values()):
-                    print(f"[LLM] {field_category} 抽取完成 | 合并后 1 个对象")
-                    return r
-            print(f"[LLM] {field_category} 抽取完成 | 无有效结果")
-            return None
+            merged = _merge_object_results(all_results)
+            if merged:
+                print(f"[LLM] {field_category} 抽取完成 | 合并后 1 个对象")
+            else:
+                print(f"[LLM] {field_category} 抽取完成 | 无有效结果")
+            return merged
 
         # 列表型：去重
         seen = set()
@@ -230,6 +315,8 @@ class LLMExtractor:
         async def extract_chunk(idx: int, chunk: str) -> Any:
             print(f"[LLM]   -> 调用 {field_category} chunk {idx + 1}/{len(chunks)} | {len(chunk)} 字符")
             prompt = prompt_template.replace("{chapter_text}", chunk)
+            # if field_category == "issuer_profile":
+            #     print(f"[LLM][issuer_profile] 输入prompt:\n{'-'*60}\n{prompt}\n{'-'*60}")
             try:
                 result = await self._get_async_client().chat_json_async(
                     prompt, system_prompt=config.SYSTEM_PROMPT, max_retries=3
@@ -255,13 +342,22 @@ class LLMExtractor:
 
         valid_results = [r for r in all_results if not isinstance(r, Exception) and r is not None]
 
+        # 展平嵌套列表（与 _extract_single 保持一致）
+        flattened = []
+        for r in valid_results:
+            if isinstance(r, list):
+                flattened.extend(r)
+            elif isinstance(r, dict):
+                flattened.append(r)
+        valid_results = flattened
+
         if is_object:
-            for r in reversed(valid_results):
-                if r and isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values()):
-                    print(f"[LLM] {field_category} 抽取完成 | 合并后 1 个对象")
-                    return r
-            print(f"[LLM] {field_category} 抽取完成 | 无有效结果")
-            return None
+            merged = _merge_object_results(valid_results)
+            if merged:
+                print(f"[LLM] {field_category} 抽取完成 | 合并后 1 个对象")
+            else:
+                print(f"[LLM] {field_category} 抽取完成 | 无有效结果")
+            return merged
 
         seen = set()
         deduped = []
